@@ -1,0 +1,65 @@
+Implementation reasoning — /learn codebase learning path (spec 20260609-230029)
+
+WHY THE ARCHITECTURE:
+- All GitHub access + heuristics live in src/app/services/ (not the view) so
+  they are unit-testable without a request context and the view stays a thin
+  HTTP adapter. The unused controllers/ package was intentionally left alone.
+- A single AnalysisError(code, message, status) type centralizes the spec's
+  status-code map (400/404/413/422/429/502). The view is one try/except.
+
+URL PARSER (repository_url.py):
+- Deliberately strict: only https + github.com, root or /tree/<branch>/<path>.
+  Strictness is the security gate — it prevents constructing ambiguous API
+  calls. Branch is single-segment by design because tree/<a>/<b>/<c> is
+  inherently ambiguous between branch=a path=b/c and branch=a/b path=c; we
+  document "first segment is the branch". .git suffix is root-only.
+- normalized_url lowercases owner/repo (GitHub is case-insensitive there) so
+  the cache key is stable; scope path is preserved verbatim.
+
+GITHUB CLIENT (github_repository_client.py):
+- Private repos are rejected by the analyzer via metadata.private even though
+  the client can read them with a token — satisfies "never analyze private".
+- Rate limit detected from 429 OR (403 + X-RateLimit-Remaining: 0).
+- Timeouts/connection errors -> 502 upstream (never leak exception text).
+- get_file_content returns None (not raise) for binary/oversized/undecodable —
+  those are "skip this file" signals, not request failures.
+- Per-request budget (REPOSITORY_ANALYSIS_MAX_API_REQUESTS) prevents fan-out.
+- FakeGitHubRepositoryClient mirrors the surface from a CPython/IDLE fixture so
+  TestingConfig and Playwright never hit the network; it recognizes only the
+  stable fixture URL and 404s everything else (handy for the not-found path).
+
+ANALYZER (repository_analysis.py):
+- Deterministic by construction (no LLM/randomness) so results are reproducible
+  and cacheable. 8 ordered categories; tie-break is (score desc, category asc,
+  depth asc, path asc) — fully total, verified by a test that feeds reversed
+  tree input and asserts identical ordering.
+- Cache is keyed (normalized_url, commit_sha): re-analyzing after a new commit
+  yields fresh guidance; same commit returns cached WITHOUT fetching the tree
+  or files (the expensive part) — asserted by call-count test.
+- Duplicate-insert race: catch IntegrityError -> rollback -> re-query -> serve
+  existing as cached:true (asserted by pre-seeding a colliding row).
+- Entry-point files (only) are fetched to sharpen their rationale using cheap
+  signals (if __name__ == __main__, def main, create_app/Flask). Excerpts are
+  intentionally NOT surfaced — the locked Step-1 contract has no excerpt field.
+
+VITE MANIFEST FIX (vite_manifest.py):
+- base.html previously hard-coded assets/main.js|css which never exist after a
+  hashed build, so production shipped no JS/CSS (latent bug the spec mandated
+  fixing). Helper reads .vite/manifest.json (Vite 5) and resolves src/main.ts
+  to hashed JS+CSS; falls back to legacy names if no manifest so it never 500s.
+
+FRONTEND:
+- Island renders all repo-provided strings as React text (no
+  dangerouslySetInnerHTML); a test injects an <img onerror> string and asserts
+  no <img> element is created. initialAnalysis renders saved pages with zero
+  fetches (asserted). Field names mirror the backend exactly — one contract,
+  no ad-hoc transforms.
+
+TOOLING NOTE:
+- The mypy PRE-COMMIT hook checks staged tests too and runs in an isolated env;
+  added types-requests + pytest to additional_dependencies. script/typecheck
+  only checks src/, so it did not catch the test-typing requirements — worth
+  remembering for future loops.
+
+VALIDATION: backend 64, frontend 23, e2e 5 all green; mypy/tsc/flake8/eslint
+clean; migration applied to Postgres and verified.
