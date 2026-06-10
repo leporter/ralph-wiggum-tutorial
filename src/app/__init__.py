@@ -43,4 +43,11 @@ def create_app(config_name: str | None = None) -> Flask:
     from .views import register_blueprints
     register_blueprints(app)
 
+    # Expose Vite asset resolution to templates (production/static mode).
+    from .vite_manifest import load_vite_assets
+
+    @app.context_processor
+    def inject_vite_assets():  # type: ignore[no-untyped-def]
+        return {'vite_assets': lambda: load_vite_assets(app.static_folder)}
+
     return app

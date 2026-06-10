@@ -51,6 +51,17 @@ IMPORTANT ALWAYS RUN these after implementing to get immediate feedback:
 - Migrations: Alembic in `migrations/`, auto-applied by `script/setup`
 - E2E tests: Playwright in `e2e/`, config in `playwright.config.ts`
 
+### `/learn` codebase analyzer
+
+- GitHub access goes through `src/app/services/`. Tests and Playwright use a
+  deterministic fake client instead of live GitHub: `TestingConfig` forces it
+  on; for the dev server / e2e set `USE_FAKE_GITHUB_CLIENT=1` (already wired
+  into `playwright.config.ts` `webServer.env`). The fake only recognizes
+  `https://github.com/python/cpython/tree/main/Lib/idlelib`.
+- Production templates resolve hashed assets from the Vite manifest
+  (`src/app/vite_manifest.py`), so a production-mode render needs
+  `cd frontend && npm run build` first (emits `static/.vite/manifest.json`).
+
 ### Browser Testing
 
 A **Playwright MCP server** is configured in `.vscode/mcp.json` for interactive browser testing via agent mode. Use the `/test-in-browser` slash command for the full workflow — it teaches you how to navigate the app, interact with elements, and verify results using accessibility snapshots.

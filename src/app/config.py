@@ -19,6 +19,27 @@ class Config:
     # Vite dev server URL for template asset loading
     VITE_DEV_SERVER = os.environ.get('VITE_DEV_SERVER', 'http://localhost:5173')
 
+    # --- GitHub codebase-learning (/learn) configuration ---
+    # Optional token; only raises public rate limits. Private repos stay rejected.
+    GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '') or None
+    GITHUB_API_URL = 'https://api.github.com'
+    GITHUB_API_VERSION = '2022-11-28'
+    GITHUB_REQUEST_TIMEOUT_SECONDS = 5
+
+    # Analysis budgets. Kept deliberately tight to bound synchronous work so a
+    # single /learn/analyze request stays well under the ~20s target.
+    REPOSITORY_ANALYSIS_MAX_API_REQUESTS = 35
+    REPOSITORY_ANALYSIS_MAX_FILES = 25
+    REPOSITORY_ANALYSIS_MAX_FILE_BYTES = 100_000
+    REPOSITORY_ANALYSIS_MAX_EXCERPT_CHARS = 1_000
+
+    # When True, the analyzer uses an in-process deterministic fake GitHub
+    # client instead of hitting the network. Enabled for tests and Playwright
+    # so the suite never depends on live GitHub or unauthenticated rate limits.
+    USE_FAKE_GITHUB_CLIENT = (
+        os.environ.get('USE_FAKE_GITHUB_CLIENT', '').lower() in ('1', 'true', 'yes')
+    )
+
 
 class DevelopmentConfig(Config):
     """Development configuration with debug enabled."""
@@ -42,6 +63,10 @@ class TestingConfig(Config):
     VITE_DEV_MODE = False
     # Disable CSRF for testing
     WTF_CSRF_ENABLED = False
+    # Always use the deterministic fake GitHub client in tests so the suite
+    # never touches the network. Real-client behavior is covered separately by
+    # tests that mock at the HTTP layer.
+    USE_FAKE_GITHUB_CLIENT = True
 
 
 class ProductionConfig(Config):

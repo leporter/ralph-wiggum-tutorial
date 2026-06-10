@@ -20,13 +20,24 @@
         </script>
         <script type="module" src="{{ config.VITE_DEV_SERVER }}/src/main.ts"></script>
     {% else %}
-        {# Production: Load from built assets using manifest #}
-        {# The manifest.json maps source files to hashed output files #}
-        <link rel="stylesheet" href="{{ url_for('static', filename='assets/main.css') }}">
-        <script type="module" src="{{ url_for('static', filename='assets/main.js') }}"></script>
+        {# Production: resolve hashed assets from the Vite manifest so the #}
+        {# correct fingerprinted JS/CSS load (fixed names never exist after #}
+        {# a hashed build). See app/vite_manifest.py. #}
+        {% set assets = vite_assets() %}
+        {% for css_file in assets.css %}
+        <link rel="stylesheet" href="{{ url_for('static', filename=css_file) }}">
+        {% endfor %}
+        <script type="module" src="{{ url_for('static', filename=assets.js) }}"></script>
     {% endif %}
 </head>
 <body class="min-h-screen bg-gray-50">
+    <nav class="bg-white border-b border-gray-200">
+        <div class="container mx-auto px-4 py-3 flex gap-6 text-sm">
+            <a href="{{ url_for('game.index') }}" class="text-gray-700 hover:text-gray-900 font-medium">Space Invaders</a>
+            <a href="{{ url_for('learn.index') }}" class="text-gray-700 hover:text-gray-900 font-medium">Learn a Codebase</a>
+        </div>
+    </nav>
+
     {% block content %}{% endblock %}
 
     {% block scripts %}{% endblock %}

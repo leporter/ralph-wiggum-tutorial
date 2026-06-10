@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Learn a Codebase{% endblock %}
+
+{% block content %}
+<main class="container mx-auto px-4 py-8 max-w-3xl">
+    <h1 class="text-3xl font-bold mb-2 text-gray-800">Learn a Codebase</h1>
+    <p class="text-gray-600 mb-6">
+        Paste a public GitHub repository URL (or a scoped
+        <code>/tree/&lt;branch&gt;/&lt;path&gt;</code> URL) to generate a guided
+        reading path.
+    </p>
+
+    {# React Island mount point. ``main.ts`` finds this element, dynamically #}
+    {# imports the learn island, and hydrates it with the boot props below. #}
+    {# ``learn_props`` carries the analyze endpoint and, on saved-result #}
+    {# pages, the initial analysis to render without a fetch. #}
+    <div data-island="learn" data-props='{{ learn_props | tojson }}'>
+        <noscript>
+            <p class="text-gray-600">JavaScript is required to use the codebase learning tool.</p>
+        </noscript>
+    </div>
+</main>
+{% endblock %}

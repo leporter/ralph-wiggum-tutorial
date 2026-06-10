@@ -1,68 +1,56 @@
-# Implementation Plan — Space Invaders Classic Gameplay
+# Implementation Plan — Public GitHub Codebase Learning Path
 
 ## Status
 
-> **Overall: 100% Complete — Feature implemented, all validation green.**
+> **Overall: COMPLETE — the `/learn` feature is fully implemented, tested, and
+> validated (backend 64 tests, frontend 23 tests, e2e 5 tests; mypy/tsc/flake8/
+> eslint clean). Space Invaders on `/` remains intact.**
 
-Spec: `specs/space-invaders-classic-gameplay.md` (comprehensive, self-contained).
+Spec: `specs/20260609-230029-codebase-learning-path-public-github-repos.md`.
 
-The Hello World scaffold has been fully removed and replaced with a client-side
-Space Invaders game mounted via the React Islands architecture. All unit tests
-(pytest + vitest), type checks (mypy + tsc), linters (flake8 + eslint), and
-Playwright E2E tests pass.
+## What was delivered (Spec Steps 1–16)
 
----
+- **Contracts & config (Steps 1–2):** Locked JSON request/response + error
+  shapes and status map (400/404/413/422/429/502). Added `requests>=2.32.0`,
+  optional `GITHUB_TOKEN`, and all `GITHUB_*` / `REPOSITORY_ANALYSIS_*` /
+  `USE_FAKE_GITHUB_CLIENT` config. `TestingConfig` forces the fake client.
+- **Vite asset fix (Step 3):** `src/app/vite_manifest.py` resolves `src/main.ts`
+  → hashed JS/CSS from the build manifest; `base.html` uses it (dev branch
+  preserved). Falls back to legacy names when no manifest. Covered by
+  `tests/test_vite_assets.py`.
+- **Persistence (Step 4):** `models/repository_analysis.py` (`repository_analyses`,
+  UUID PK, unique `(normalized_repo_url, commit_sha)`, URL index, JSON payload).
+  Migration `a1b2c3d4e5f6` chained after `f1a2b3c4d5e6`; applied to Postgres.
+  Duplicate-insert race handled (catch `IntegrityError` → re-query → cache hit).
+- **URL parser (Step 5):** `services/repository_url.py` — strict https/github.com
+  root + `/tree/<branch>/<path>` only, single-segment branch, `.git` on root
+  only, normalization lowercases owner/repo. `tests/test_repository_url.py`.
+- **GitHub client (Step 6):** `services/github_repository_client.py` — budgeted
+  `requests` client with timeouts, correct headers, private→not-found, rate-limit
+  detection, binary/oversized skipping, no secret logging. Plus the deterministic
+  `FakeGitHubRepositoryClient` (CPython/IDLE fixture). `tests/test_github_repository_client.py`.
+- **Orchestration + heuristics (Steps 7–8):** `services/repository_analysis.py` —
+  8 ordered categories, deterministic tie-break (score↓, category↑, depth↑,
+  path↑), ignored dirs, scope filtering, bounded entry-point content fetch for
+  sharper reasons, cache lookup before tree/file fetch, blob links with commit
+  SHA. Budgets enforced. `tests/test_repository_analysis_service.py`.
+- **Routes/templates/schemas (Steps 9–10):** `views/learn.py` (`GET /learn`,
+  `POST /learn/analyze` JSON-only, `GET /learn/<id>`), `templates/learn.html`,
+  nav in `base.html`, `schemas/repository_analysis.py` (single serialization
+  seam + TypedDicts). `tests/test_learn_view.py`.
+- **React island (Step 11):** `islands/learn/{LearnCodebaseIsland.tsx,index.tsx,
+  types.ts}`, registered in `main.ts`. Form/loading/error/result states, renders
+  `initialAnalysis` without refetch, prominent reading order, text-only render
+  (no `dangerouslySetInnerHTML`). `frontend/tests/learn/LearnCodebaseIsland.test.tsx`.
+- **Fake data + tests + e2e (Steps 12–15):** Fake client wired into Playwright
+  via `webServer.env.USE_FAKE_GITHUB_CLIENT`. `e2e/learn.spec.ts` covers submit →
+  result → saved URL; game e2e still green.
+- **Validation (Step 16):** All suites pass; types and lint clean.
 
-## What was built (2026-05-29)
+## Notes / follow-ups (out of scope per spec)
 
-### Backend
-- `src/app/views/game.py` — `game_bp`; `GET /` renders `game.html` (no DB, no API).
-- `src/app/templates/game.html` — extends `base.html`; title "Space Invaders" + `data-island="game"` mount + `<noscript>` fallback.
-- Registered `game_bp` in `src/app/views/__init__.py`.
-- `migrations/versions/f1a2b3c4d5e6_drop_hello_table.py` — drops `hello` (down recreates it), chained after the original create migration so `script/setup` stays reproducible.
-- Removed: `views/hello.py`, `controllers/hello.py`, `models/hello.py`, `schemas/hello.py`, `templates/hello/`, and cleared their `__init__` exports.
-- `tests/test_game_view.py` — `GET /` 200, contains `data-island="game"`, title is "Space Invaders". Retained `TestErrorHandlers` (404 HTML/JSON) so error-handler coverage survives.
-
-### Frontend engine (`frontend/src/game/`, framework-agnostic, dt-based)
-- `types.ts`, `constants.ts` (px/s speeds; 5×11 grid; per-row points; colors).
-- `Bullet.ts` (sign of speed = direction; off-screen → dead).
-- `Player.ts` (bounds-clamped movement; shot cooldown rate-limits held Space).
-- `Alien.ts` (thin data class) + `AlienGrid.ts` (lock-step march, edge reverse+descend, speed-up as swarm thins, bottom-of-column firing, `reachedBottom`, `isCleared`).
-- `InputHandler.ts` (held-key set + edge-triggered `consumeStart()`; `destroy()` removes listeners).
-- `Renderer.ts` (geometric shapes only; start/gameover/win screens; HUD score).
-- `SpaceInvaders.ts` (RAF loop, frame-rate-independent dt clamped to 0.05s, AABB collisions, state machine start→playing→won/gameover→restart, `start()`/`reset()`/`destroy()`).
-
-### Island integration
-- `frontend/src/islands/game/GameIsland.tsx` — thin React wrapper; creates engine + `start()` on mount, `destroy()` on unmount.
-- `frontend/src/islands/game/index.tsx` — `mount()` clears fallback and renders.
-- `frontend/src/main.ts` registry maps `game: () => import('./islands/game')`.
-- `frontend/src/types/index.ts` — Hello types removed, generic `IslandProps` kept.
-- Removed Hello frontend + `frontend/tests/islands/hello/`.
-
-### Tests
-- `frontend/tests/game/entities.test.ts` (11) — boundary clamp, bullet pruning, swarm reversal/descent, column-front firing, clear/reachedBottom.
-- `frontend/tests/game/SpaceInvaders.test.ts` (7) — state transitions, win/lose, restart, missing-context throw, destroy cleanup (stub canvas context).
-- `e2e/game.spec.ts` (4) — title, canvas 800×600 visible, no console errors on input, canvas changes on Space.
-
----
-
-## Validation results (all green)
-- `PYTHONPATH=src pytest tests/` → 5 passed.
-- `cd frontend && npm test` → 18 passed.
-- `mypy src/` → clean (10 files). `flake8 src/ tests/` → clean.
-- `cd frontend && npm run typecheck` (tsc) → clean. `npm run lint` (eslint) → clean.
-- `npx playwright test --reporter=list` → 4 passed.
-- `cd frontend && npm run build` → production bundle builds clean.
-
----
-
-## Notes / learnings
-- Run E2E with `--reporter=list` in agent/CI shells; the default `html` reporter opens a blocking report server (this caused an initial hang). Recorded in AGENTS.md.
-- Playwright browsers must be installed once: `npx playwright install chromium`.
-- `vite build` empties `src/app/static/` (emptyOutDir) and removes `.gitkeep`; restore it after a local build. Built assets under `src/app/static/assets|.vite` are gitignored.
-- ESLint flat config has no DOM type globals, so avoid `as EventListener` casts in engine code — type handlers as `(e: Event)` and narrow internally.
-- tsc `noUnusedLocals`/`noUnusedParameters` is on: don't store constructor params you don't reference; underscore-prefix intentionally-unused params (`_props`).
-
-## Out of scope (per spec)
-Persistent high scores / new model+API, multiple levels, power-ups, sound,
-mobile touch controls, sprite assets.
+- LLM providers, private-repo support, async/background analysis, conversational
+  tutoring remain documented follow-ups after this synchronous MVP.
+- The analyzer fetches content only for entry-point candidates (to refine
+  rationale); excerpts are intentionally not surfaced in the payload, matching
+  the locked contract. Revisit if a future step adds excerpt display.

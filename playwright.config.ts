@@ -27,5 +27,10 @@ export default defineConfig({
     url: 'http://localhost:5000',
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
+    // Force the deterministic fake GitHub client so the browser flow never
+    // depends on live GitHub or unauthenticated API rate limits.
+    env: {
+      USE_FAKE_GITHUB_CLIENT: '1',
+    },
   },
 });
